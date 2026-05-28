@@ -5,6 +5,8 @@ function beltUpdate()
 end
 
 function belt.updateAdjacentBelts(belts)
+  local moves = {}
+  
   for i,v in pairs(belts) do
     targetX = v.x
     targetY = v.y
@@ -25,22 +27,24 @@ function belt.updateAdjacentBelts(belts)
     end
     
     for k,l in pairs(belts) do
-      if l.x == targetX and l.y == targetY then
-        table.insert(v.adjacentBelts, l)
+      if l.x == targetX and l.y == targetY and not l.item then
+        table.insert(moves, {from = v, to = l})
         break
       end
     end
   end
   
-  for i,v in pairs(belts) do
-    for k, l in pairs(v.adjacentBelts) do
-      if not l.item then
-        l.item = v.item
-        v.item = nil
-      end
+  local hadItem = {}
+  for _,move in pairs(moves) do
+    hadItem[move.from] = move.from.item
+    hadItem[move.to] = move.to.item
+  end
+  
+  for _,move in pairs(moves) do
+    if hadItem[move.from] and not hadItem[move.to] then
+      move.to.item = move.from.item
+      move.from.item = nil
     end
-    
-    v.adjacentBelts = {}
   end
 end
 

@@ -19,6 +19,7 @@ function love.load()
   
   belts = {}
   beltSpeed = .15
+  beltCooldown = 0
   
   placeButtonImage = love.graphics.newImage("assets/placeButton.png")
   placeButtonStates = {}
@@ -62,8 +63,14 @@ function love.update(dt)
     end
   end
   
-  beltHandler.updateAdjacentBelts(belts)
-  woodUnitHandler.updateAdjacentBelts(woodUnits, belts)
+  beltCooldown = beltCooldown + beltSpeed
+    
+  if beltCooldown > 10 then
+    beltHandler.updateAdjacentBelts(belts)
+    woodUnitHandler.updateAdjacentBelts(woodUnits, belts)
+    
+    beltCooldown = 0
+  end
 end
 
 function love.draw()
@@ -93,7 +100,13 @@ function love.draw()
     love.graphics.draw(woodUnitImage, woodUnitFrames[currentWoodUnitFrame], love.graphics:getWidth() / 2 - 32, love.graphics.getHeight() - 48)
     
     if block then
-      love.graphics.draw(block, love.mouse:getX(), love.mouse:getY())
+      if block == beltImage then
+        love.graphics.draw(beltImage, beltFrames[currentBeltFrame], love.mouse:getX(), love.mouse:getY(), math.rad(buildRotation * 90), 1, 1, tileSize / 2, tileSize / 2)
+      elseif block == woodUnitImage then
+        love.graphics.draw(woodUnitImage, woodUnitFrames[1], love.mouse:getX(), love.mouse:getY())
+      else
+        love.graphics.draw(block, love.mouse:getX(), love.mouse:getY())
+      end
     end
   end
 end
