@@ -1,6 +1,6 @@
 local wu = {}
 
-function wu.updateAdjacentBelts(woodUnits, belts)
+function wu.updateAdjacentBelts()
   for i,v in pairs(woodUnits) do
     unitX = v.x
     unitY = v.y
@@ -11,13 +11,13 @@ function wu.updateAdjacentBelts(woodUnits, belts)
       beltX = l.x
       beltY = l.y
       
-      if beltX == unitX + tileSize and beltY == unitY then
+      if beltX == unitX + tileSize and beltY == unitY  and l.direction == 0 then
         table.insert(adjacentBelts, l)
-      elseif beltX == unitX - tileSize and beltY == unitY then
+      elseif beltX == unitX - tileSize and beltY == unitY and l.direction == 2  then
         table.insert(adjacentBelts, l)
-      elseif beltX == unitX and beltY == unitY + tileSize then
+      elseif beltX == unitX and beltY == unitY + tileSize and l.direction == 1 then
         table.insert(adjacentBelts, l)
-      elseif beltX == unitX and beltY == unitY - tileSize then
+      elseif beltX == unitX and beltY == unitY - tileSize and l.direction == 3 then
         table.insert(adjacentBelts, l)
       end
     end
@@ -27,6 +27,7 @@ function wu.updateAdjacentBelts(woodUnits, belts)
     for k, l in pairs(v.adjacentBelts) do
       if v.state and not l.item then
         l.item = woodImage
+        v.woodProduced = v.woodProduced + 1
       end
     end
     
