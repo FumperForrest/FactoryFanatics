@@ -2,6 +2,8 @@ local beltHandler = require("src/belts")
 local woodUnitHandler = require("src/woodUnits")
 local woodCompactorHandler = require("src/woodCompactors")
 local itemContainerHandler = require("src/itemContainers")
+local json = require("libraries/dkjson")
+local camera = require("libraries/camera")
 
 tileSize = 32
 building = false
@@ -12,8 +14,14 @@ block = nil
 iteration = 0
 maxIterate = 10
 
+local cam
+local camSpeed = 350
+
 function love.load()
+  print(love.filesystem.getSaveDirectory() .. "/save.json")
+  
   love.graphics.setDefaultFilter("nearest", "nearest")
+  cam = camera()
   
   beltImage = love.graphics.newImage("assets/belt.png")
   beltFrames = {}
@@ -70,9 +78,21 @@ function love.load()
   itemContainers = {}
   containerGroups = {}
   
+  tiles = {}
+  
   woodImage = love.graphics.newImage("assets/wood.png")
   woodPlankImage = love.graphics.newImage("assets/woodPlank.png")
   hotbarImage = love.graphics.newImage("assets/hotbar.png")
+  
+  if love.filesystem.getInfo("save.json") then
+    local contents = love.filesystem.read("save.json")
+    
+    local data = json.decode(contents)
+    
+    belts = data.belts or {}
+    woodUnits = data.woodUnits or {}
+    woodCompactors = data.woodCompactors or {}
+  end
 end
 
 function love.update(dt)
@@ -113,9 +133,21 @@ function love.update(dt)
     
     beltCooldown = 0
   end
+  
+  if love.keyboard.isDown("w") then
+    cam:move(0, -camSpeed * dt)
+  elseif love.keyboard.isDown("a") then
+    cam:move(-camSpeed * dt, 0)
+  elseif love.keyboard.isDown("s") then
+    cam:move(0, camSpeed * dt)
+  elseif love.keyboard.isDown("d") then
+    cam:move(camSpeed * dt, 0)
+  end
 end
 
 function love.draw()
+  cam:attach()
+  
   for i, v in pairs(belts) do
     drawRotation = math.rad(v.direction * 90)
     
@@ -168,16 +200,18 @@ function love.draw()
     end
   end
   
+  cam:detach()
+  
   love.graphics.draw(placeButtonImage, placeButtonFrames[placeButtonState], 0, 0)
   love.graphics.draw(trashcanImage, trashcanFrames[trashcanState], love.graphics:getWidth()-32, 0)
   
   if building then
-    love.graphics.draw(hotbarImage, love.graphics:getWidth() / 2 - 64, love.graphics.getHeight() - 48)
+    love.graphics.draw(hotbarImage, love.graphics:getWidth() / 2 - 64, love.graphics:getHeight() - 48)
     
-    love.graphics.draw(beltImage, beltFrames[currentBeltFrame], love.graphics:getWidth() / 2 - 64, love.graphics.getHeight() - 48)
-    love.graphics.draw(woodUnitImage, woodUnitFrames[currentWoodUnitFrame], love.graphics:getWidth() / 2 - 32, love.graphics.getHeight() - 48)
-    love.graphics.draw(woodCompactorImage, woodCompactorFrames[currentWoodCompactorFrame], love.graphics:getWidth() / 2, love.graphics.getHeight() - 48)
-    love.graphics.draw(itemContainerImage, itemContainerFrames[1], love.graphics:getWidth() / 2 + 32, love.graphics.getHeight() - 48)
+    love.graphics.draw(beltImage, beltFrames[currentBeltFrame], love.graphics:getWidth() / 2 - 64, love.graphics:getHeight() - 48)
+    love.graphics.draw(woodUnitImage, woodUnitFrames[currentWoodUnitFrame], love.graphics:getWidth() / 2 - 32, love.graphics:getHeight() - 48)
+    love.graphics.draw(woodCompactorImage, woodCompactorFrames[currentWoodCompactorFrame], love.graphics:getWidth() / 2, love.graphics:getHeight() - 48)
+    love.graphics.draw(itemContainerImage, itemContainerFrames[1], love.graphics:getWidth() / 2 + 32, love.graphics:getHeight() - 48)
     
     if block then
       if block == beltImage then
@@ -196,6 +230,8 @@ function love.draw()
 end
 
 function love.mousepressed(mouseX,mouseY,button)
+  local worldX, worldY = cam:mousePosition()
+  
   if button == 1 then
     if mouseX > 0 and mouseX < 32 and mouseY > 0 and mouseY < 32 then
       placeButtonState = 3 - placeButtonState
@@ -225,29 +261,29 @@ function love.mousepressed(mouseX,mouseY,button)
     
     if building then
       --Belt Placement Selection
-      if mouseX > love.graphics:getWidth() / 2 - 64 and mouseX < love.graphics:getWidth() / 2 - 32 and mouseY > love.graphics.getHeight() - 48 and mouseY < love.graphics.getHeight() - 12 then
+      if mouseX > love.graphics:getWidth() / 2 - 64 and mouseX < love.graphics:getWidth() / 2 - 32 and mouseY > love.graphics:getHeight() - 48 and mouseY < love.graphics:getHeight() - 12 then
         block = beltImage
       end
       
       --Wood Unit Placement Selection
-      if mouseX > love.graphics:getWidth() / 2 - 32 and mouseX < love.graphics:getWidth() / 2 and mouseY > love.graphics.getHeight() - 48 and mouseY < love.graphics.getHeight() - 12 then
+      if mouseX > love.graphics:getWidth() / 2 - 32 and mouseX < love.graphics:getWidth() / 2 and mouseY > love.graphics:getHeight() - 48 and mouseY < love.graphics:getHeight() - 12 then
         block = woodUnitImage
       end
       
       --Wood Compactor Placement Selection
-      if mouseX > love.graphics:getWidth() / 2 and mouseX < love.graphics:getWidth() / 2 + 32 and mouseY > love.graphics.getHeight() - 48 and mouseY < love.graphics.getHeight() - 12 then
+      if mouseX > love.graphics:getWidth() / 2 and mouseX < love.graphics:getWidth() / 2 + 32 and mouseY > love.graphics:getHeight() - 48 and mouseY < love.graphics:getHeight() - 12 then
         block = woodCompactorImage
       end
       
       --Item Container Placement Selection
-      if mouseX > love.graphics:getWidth() / 2 + 32 and mouseX < love.graphics:getWidth() / 2 + 64 and mouseY > love.graphics.getHeight() - 48 and mouseY < love.graphics.getHeight() - 12 then
+      if mouseX > love.graphics:getWidth() / 2 + 32 and mouseX < love.graphics:getWidth() / 2 + 64 and mouseY > love.graphics:getHeight() - 48 and mouseY < love.graphics:getHeight() - 12 then
         block = itemContainerImage
       end
     end
     
     if building then
-      tileX = math.floor(mouseX / tileSize) * tileSize
-      tileY = math.floor(mouseY / tileSize) * tileSize
+      tileX = math.floor(worldX / tileSize) * tileSize
+      tileY = math.floor(worldY / tileSize) * tileSize
       
       for i,v in pairs(belts) do
         if v.x == tileX and v.y == tileY then
@@ -305,13 +341,13 @@ function love.mousepressed(mouseX,mouseY,button)
       end
     else
       for i,v in pairs(woodUnits) do
-        if mouseX > v.x and mouseX < v.x + tileSize and mouseY > v.y and mouseY < v.y + tileSize then
+        if worldX > v.x and worldX < v.x + tileSize and worldY > v.y and worldY < v.y + tileSize then
           v.state = not v.state
         end
       end
       
       for i,v in pairs(woodCompactors) do
-        if mouseX > v.x and mouseX < v.x + tileSize and mouseY > v.y and mouseY < v.y + tileSize then
+        if worldX > v.x and worldX < v.x + tileSize and worldY > v.y and worldY < v.y + tileSize then
           v.state = not v.state
         end
       end
@@ -319,25 +355,25 @@ function love.mousepressed(mouseX,mouseY,button)
     
     if deleting then
       for i,v in pairs(woodUnits) do
-        if mouseX > v.x and mouseX < v.x + tileSize and mouseY > v.y and mouseY < v.y + tileSize - 12 then
+        if worldX > v.x and worldX < v.x + tileSize and worldY > v.y and worldY < v.y + tileSize - 12 then
           table.remove(woodUnits, i)
         end
       end
         
       for i,v in pairs(belts) do
-        if mouseX > v.x and mouseX < v.x + tileSize and mouseY > v.y and mouseY < v.y + tileSize - 12 then
+        if worldX > v.x and worldX < v.x + tileSize and worldY > v.y and worldY < v.y + tileSize - 12 then
           table.remove(belts, i)
         end
       end
         
       for i,v in pairs(woodCompactors) do
-        if mouseX > v.x and mouseX < v.x + tileSize and mouseY > v.y and mouseY < v.y + tileSize - 12 then
+        if worldX > v.x and worldX < v.x + tileSize and worldY > v.y and worldY < v.y + tileSize - 12 then
           table.remove(woodCompactors, i)
         end
       end
       
       for i,v in pairs(itemContainers) do
-        if mouseX > v.x and mouseX < v.x + tileSize and mouseY > v.y and mouseY < v.y + tileSize - 12 then
+        if worldX > v.x and worldX < v.x + tileSize and worldY > v.y and worldY < v.y + tileSize - 12 then
           table.remove(itemContainers, i)
         end
       end
@@ -353,4 +389,17 @@ function love.keypressed(key)
       buildRotation = buildRotation - 1
     end
   end
+end
+
+function love.quit()
+  print("ok") 
+  local data = {
+    belts = belts,
+    woodUnits = woodUnits,
+    woodCompactors = woodCompactors,
+  }
+  
+  local encoded = json.encode(data)
+  
+  love.filesystem.write("save.json", encoded)
 end
