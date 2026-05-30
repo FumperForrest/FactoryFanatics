@@ -2,6 +2,7 @@ local beltHandler = require("src/belts")
 local woodUnitHandler = require("src/woodUnits")
 local woodCompactorHandler = require("src/woodCompactors")
 local itemContainerHandler = require("src/itemContainers")
+local ironMineHandler = require("src/ironMines")
 local json = require("libraries/dkjson")
 local camera = require("libraries/camera")
 
@@ -18,6 +19,7 @@ local cam
 local camSpeed = 350
 
 function love.load()
+  
   print(love.filesystem.getSaveDirectory() .. "/save.json")
   
   love.graphics.setDefaultFilter("nearest", "nearest")
@@ -57,6 +59,13 @@ function love.load()
   
   woodUnits = {}
   
+  ironMineImage = love.graphics.newImage("assets/ironMine.png")
+  ironMineFrames = {}
+  table.insert(ironMineFrames, love.graphics.newQuad(0,0, 32, 32, 64, 32))
+  table.insert(ironMineFrames, love.graphics.newQuad(32,0, 32, 32, 64, 32))
+  
+  ironMines = {}
+  
   woodCompactorImage = love.graphics.newImage("assets/woodCompactor.png")
   woodCompactorFrames = {}
   table.insert(woodCompactorFrames, love.graphics.newQuad(0,0, 32, 32, 128, 32))
@@ -70,8 +79,9 @@ function love.load()
   
   itemContainerImage = love.graphics.newImage("assets/itemContainer.png")
   itemContainerFrames = {}
-  table.insert(itemContainerFrames, love.graphics.newQuad(0,0, 32, 32, 64, 32))
-  table.insert(itemContainerFrames, love.graphics.newQuad(32,0, 32, 32, 64, 32))
+  table.insert(itemContainerFrames, love.graphics.newQuad(0,0, 32, 32, 96, 32))
+  table.insert(itemContainerFrames, love.graphics.newQuad(32,0, 32, 32, 96, 32))
+  table.insert(itemContainerFrames, love.graphics.newQuad(64,0, 32, 32, 96, 32))
   
   currentItemContainerFrame = 1
   
@@ -82,16 +92,102 @@ function love.load()
   
   woodImage = love.graphics.newImage("assets/wood.png")
   woodPlankImage = love.graphics.newImage("assets/woodPlank.png")
+  rawIronImage = love.graphics.newImage("assets/rawIron.png")
   hotbarImage = love.graphics.newImage("assets/hotbar.png")
+  
+  itemImages = {
+    woodImage = woodImage,
+    woodPlankImage = woodPlankImage,
+    rawIronImage = rawIronImage,
+  }
   
   if love.filesystem.getInfo("save.json") then
     local contents = love.filesystem.read("save.json")
     
     local data = json.decode(contents)
     
-    belts = data.belts or {}
-    woodUnits = data.woodUnits or {}
-    woodCompactors = data.woodCompactors or {}
+    for _, v in pairs(data.belts) do
+      table.insert(belts, {
+        x = v.x,
+        y = v.y,
+        direction = v.direction,
+        
+        adjacentBelts = {},
+        
+        item = v.item
+      })
+    end
+    
+    for _, v in pairs(data.woodUnits) do
+      table.insert(woodUnits, {
+        x = v.x,
+        y = v.y,
+        state = v.state,
+        woodProduced = v.woodProduced,
+        
+        adjacentBelts = {},
+      })
+    end
+
+    for i,v in pairs(data.ironMines) do
+      table.insert(ironMines, {
+        x = v.x,
+        y = v.y,
+        state = v.state,
+        direction = v.direction,
+        ironProduced = v.ironProduced,
+        
+        adjacentBelts = {},
+      })
+    end
+    
+    for _, v in pairs(data.woodCompactors) do
+      table.insert(woodCompactors, {
+        x = v.x,
+        y = v.y,
+        state = v.state,
+        woodStorage = v.woodStorage,
+        neededResources = 2,
+        
+        inputBelts = {},
+        outputBelts = {},
+      })
+    end
+    
+    for _, v in pairs(data.itemContainers) do
+      local container = {
+        x = v.x,
+        y = v.y,
+        storage = v.storage,
+        items = {},
+        currentFrame = 1,
+        
+        adjacentContainers = {},
+        inputBelts = {},
+        outputBelts = {},
+        
+        groupid = v.groupid,
+      }
+      
+      if not containerGroups[v.groupid] then
+        containerGroups[v.groupid] = {
+          items = {},
+          storage = 0,
+          members = {},
+        }
+      end
+      
+      container.group = containerGroups[v.groupid]
+      
+      table.insert(container.group.members, container)
+      table.insert(itemContainers, container)
+    end
+    
+    for i,v in pairs(data.groupInventories) do
+      if containerGroups[i] then
+        containerGroups[i].items = v
+      end
+    end
   end
 end
 
@@ -100,12 +196,6 @@ function love.update(dt)
     iteration = iteration + 1
   else
     iteration = 0
-    
-    if currentBeltFrame == 1 then
-      currentBeltFrame = 2
-    else
-      currentBeltFrame = 1
-    end
     
     if currentWoodUnitFrame >= 4 then
       currentWoodUnitFrame = 1
@@ -118,18 +208,23 @@ function love.update(dt)
     else
       currentWoodCompactorFrame = currentWoodCompactorFrame + 1
     end
-    
-    currentItemContainerFrame = 1
   end
   
   beltCooldown = beltCooldown + beltSpeed
     
   if beltCooldown > 10 then
-    
     woodUnitHandler.updateAdjacentBelts()
+    ironMineHandler.updateAdjacentBelts()
     woodCompactorHandler.updateAdjacentBelts()
-    beltHandler.updateAdjacentBelts()
     itemContainerHandler.updateAdjacentTiles()
+    beltHandler.updateAdjacentBelts()
+    
+    
+    if currentBeltFrame == 1 then
+      currentBeltFrame = 2
+    else
+      currentBeltFrame = 1
+    end
     
     beltCooldown = 0
   end
@@ -143,6 +238,12 @@ function love.update(dt)
   elseif love.keyboard.isDown("d") then
     cam:move(camSpeed * dt, 0)
   end
+  
+  if love.keyboard.isDown("=") then
+    cam:zoom(1 + 1.5 * dt)
+  elseif love.keyboard.isDown("-") then
+    cam:zoom(1 - 1.5 * dt)
+  end
 end
 
 function love.draw()
@@ -153,7 +254,7 @@ function love.draw()
     
     love.graphics.draw(beltImage, beltFrames[currentBeltFrame], v.x + tileSize/2, v.y + tileSize/2, drawRotation, 1, 1, tileSize/2, tileSize/2)
     if v.item then
-      love.graphics.draw(v.item, v.x, v.y)
+      love.graphics.draw(itemImages[v.item], v.x, v.y)
     end
   end
   
@@ -167,6 +268,18 @@ function love.draw()
     love.graphics.print("wood produced: "..v.woodProduced, v.x - 30, v.y - 20)
   end
   
+  for i, v in pairs(ironMines) do
+    drawRotation = math.rad(v.direction * 90)
+    
+    if v.state == false then
+      love.graphics.draw(ironMineImage, ironMineFrames[1], v.x + tileSize/2, v.y + tileSize/2, drawRotation, 1, 1, tileSize/2, tileSize/2)
+    else
+      love.graphics.draw(ironMineImage, ironMineFrames[2], v.x + tileSize/2, v.y + tileSize/2, drawRotation, 1, 1, tileSize/2, tileSize/2)
+    end
+    
+    love.graphics.print("iron produced: "..v.ironProduced, v.x - 30, v.y - 20)
+  end
+  
   for i, v in pairs(woodCompactors) do
     if v.state == false then
       love.graphics.draw(woodCompactorImage, woodCompactorFrames[1], v.x, v.y)
@@ -177,26 +290,27 @@ function love.draw()
     love.graphics.print("wood storage: "..v.woodStorage, v.x - 30, v.y - 20)
   end
   
+  local printedGroups = {}
+  
   for i, v in pairs(itemContainers) do
-    love.graphics.draw(itemContainerImage, itemContainerFrames[currentItemContainerFrame], v.x, v.y)
-    
-    sumX = 0
-    sumY = 0
+    local frame = v.currentFrame or 1
+    love.graphics.draw(itemContainerImage, itemContainerFrames[frame], v.x, v.y)
+  end
+  
+  for i, v in pairs(itemContainers) do
+    local g = v.group
+    if g and not printedGroups[g] then
+      printedGroups[g] = true
 
-    if v.group.storage then
-      v.group.storage = 0
+      local sumX, sumY = 0, 0
       
-      for _, container in ipairs(v.group) do
-        v.group.storage = v.group.storage + container.storage
-        
+      for _, container in ipairs(g.members) do
         sumX = sumX + container.x
         sumY = sumY + container.y
       end
-      
-      if v == v.group[#v.group] then
-        love.graphics.print("group storage: "..v.group.storage, sumX/#v.group, sumY/#v.group)
-        love.graphics.print("items: "..#v.group.items, sumX/#v.group, sumY/#v.group + 20)
-      end
+
+      love.graphics.print("group storage: "..g.storage, sumX/#g.members, sumY/#g.members)
+      love.graphics.print("items: "..#g.items, sumX/#g.members, sumY/#g.members + 20)
     end
   end
   
@@ -205,6 +319,8 @@ function love.draw()
   love.graphics.draw(placeButtonImage, placeButtonFrames[placeButtonState], 0, 0)
   love.graphics.draw(trashcanImage, trashcanFrames[trashcanState], love.graphics:getWidth()-32, 0)
   
+  love.graphics.print("Rotation: "..buildRotation, 0, love.graphics:getHeight() - 32)
+  
   if building then
     love.graphics.draw(hotbarImage, love.graphics:getWidth() / 2 - 64, love.graphics:getHeight() - 48)
     
@@ -212,6 +328,7 @@ function love.draw()
     love.graphics.draw(woodUnitImage, woodUnitFrames[currentWoodUnitFrame], love.graphics:getWidth() / 2 - 32, love.graphics:getHeight() - 48)
     love.graphics.draw(woodCompactorImage, woodCompactorFrames[currentWoodCompactorFrame], love.graphics:getWidth() / 2, love.graphics:getHeight() - 48)
     love.graphics.draw(itemContainerImage, itemContainerFrames[1], love.graphics:getWidth() / 2 + 32, love.graphics:getHeight() - 48)
+    love.graphics.draw(ironMineImage, ironMineFrames[1], love.graphics:getWidth() / 2 + 64, love.graphics:getHeight() - 48)
     
     if block then
       if block == beltImage then
@@ -222,6 +339,8 @@ function love.draw()
         love.graphics.draw(woodCompactorImage, woodCompactorFrames[1], love.mouse:getX(), love.mouse:getY(), 0, 1, 1, tileSize / 2, tileSize / 2)
       elseif block == itemContainerImage then
         love.graphics.draw(itemContainerImage, itemContainerFrames[currentItemContainerFrame], love.mouse:getX(), love.mouse:getY(), 0, 1, 1, tileSize / 2, tileSize / 2)
+      elseif block == ironMineImage then
+        love.graphics.draw(ironMineImage, ironMineFrames[1], love.mouse:getX(), love.mouse:getY(), math.rad(buildRotation * 90), 1, 1, tileSize / 2, tileSize / 2)
       else
         love.graphics.draw(block, love.mouse:getX(), love.mouse:getY())
       end
@@ -279,9 +398,14 @@ function love.mousepressed(mouseX,mouseY,button)
       if mouseX > love.graphics:getWidth() / 2 + 32 and mouseX < love.graphics:getWidth() / 2 + 64 and mouseY > love.graphics:getHeight() - 48 and mouseY < love.graphics:getHeight() - 12 then
         block = itemContainerImage
       end
+      
+      --Iron Mine Placement Selection
+      if mouseX > love.graphics:getWidth() / 2 + 64 and mouseX < love.graphics:getWidth() / 2 + 96 and mouseY > love.graphics:getHeight() - 48 and mouseY < love.graphics:getHeight() - 12 then
+        block = ironMineImage
+      end
     end
     
-    if building then
+    if building and not ((mouseX > love.graphics:getWidth() / 2 - 64 and mouseX < love.graphics:getWidth() / 2 - 32 and mouseY > love.graphics:getHeight() - 48 and mouseY < love.graphics:getHeight()) or (mouseX > love.graphics:getWidth() / 2 - 32 and mouseX < love.graphics:getWidth() / 2 and mouseY > love.graphics:getHeight() - 48 and mouseY < love.graphics:getHeight() - 12) or (mouseX > love.graphics:getWidth() / 2 and mouseX < love.graphics:getWidth() / 2 + 32 and mouseY > love.graphics:getHeight() - 48 and mouseY < love.graphics:getHeight() - 12) or (mouseX > love.graphics:getWidth() / 2 + 32 and mouseX < love.graphics:getWidth() / 2 + 64 and mouseY > love.graphics:getHeight() - 48 and mouseY < love.graphics:getHeight() - 12) or (mouseX > love.graphics:getWidth() - 32 and mouseX < love.graphics:getWidth() and mouseY > 0 and mouseY < 32) or (mouseX > 0 and mouseX < 32 and mouseY > 0 and mouseY < 32) or (mouseX > love.graphics:getWidth() / 2 + 64 and mouseX < love.graphics:getWidth() / 2 + 96 and mouseY > love.graphics:getHeight() - 48 and mouseY < love.graphics:getHeight() - 12)) then
       tileX = math.floor(worldX / tileSize) * tileSize
       tileY = math.floor(worldY / tileSize) * tileSize
       
@@ -292,6 +416,24 @@ function love.mousepressed(mouseX,mouseY,button)
       end
       
       for i,v in pairs(woodUnits) do
+        if v.x == tileX and v.y == tileY then
+          return
+        end
+      end
+      
+      for i,v in pairs(woodCompactors) do
+        if v.x == tileX and v.y == tileY then
+          return
+        end
+      end
+      
+      for i,v in pairs(itemContainers) do
+        if v.x == tileX and v.y == tileY then
+          return
+        end
+      end
+      
+      for i,v in pairs(ironMines) do
         if v.x == tileX and v.y == tileY then
           return
         end
@@ -313,6 +455,15 @@ function love.mousepressed(mouseX,mouseY,button)
             adjacentBelts = {},
             woodProduced = 0,
           })
+      elseif block == ironMineImage then
+        table.insert(ironMines, {
+            x = tileX,
+            y = tileY,
+            state = false,
+            direction = buildRotation,
+            adjacentBelts = {},
+            ironProduced = 0,
+          })
       elseif block == woodCompactorImage then
         table.insert(woodCompactors, {
             x = tileX,
@@ -331,13 +482,24 @@ function love.mousepressed(mouseX,mouseY,button)
           inputBelts = {},
           outputBelts = {},
           storage = 20,
+          groupid = 0,
+          currentFrame = 1,
+          lastItemCount = 0,
         }
           
         container.group = {container}
-          
+        
+        container.group = {
+          storage = 0,
+          items = {},
+          members = {container},
+        }
+        
+        table.insert(containerGroups, container.group)
+        container.groupid = #containerGroups
+        
         table.insert(itemContainers, container)
-        container.group.storage = 0
-        container.group.items = {}
+        
       end
     else
       for i,v in pairs(woodUnits) do
@@ -347,6 +509,12 @@ function love.mousepressed(mouseX,mouseY,button)
       end
       
       for i,v in pairs(woodCompactors) do
+        if worldX > v.x and worldX < v.x + tileSize and worldY > v.y and worldY < v.y + tileSize then
+          v.state = not v.state
+        end
+      end
+      
+      for i,v in pairs(ironMines) do
         if worldX > v.x and worldX < v.x + tileSize and worldY > v.y and worldY < v.y + tileSize then
           v.state = not v.state
         end
@@ -377,6 +545,12 @@ function love.mousepressed(mouseX,mouseY,button)
           table.remove(itemContainers, i)
         end
       end
+      
+      for i,v in pairs(ironMines) do
+        if worldX > v.x and worldX < v.x + tileSize and worldY > v.y and worldY < v.y + tileSize - 12 then
+          table.remove(ironMines, i)
+        end
+      end
     end
   end
 end
@@ -392,12 +566,65 @@ function love.keypressed(key)
 end
 
 function love.quit()
-  print("ok") 
   local data = {
-    belts = belts,
-    woodUnits = woodUnits,
-    woodCompactors = woodCompactors,
+    belts = {},
+    woodUnits = {},
+    ironMines = {},
+    woodCompactors = {},
+    itemContainers = {},
+    groupInventories = {},
   }
+  
+  for i,v in pairs(belts) do
+    table.insert(data.belts, {
+      x = v.x,
+      y = v.y,
+      direction = v.direction,
+      
+      item = v.item,
+    })
+  end
+  
+  for i,v in pairs(woodUnits) do
+    table.insert(data.woodUnits, {
+      x = v.x,
+      y = v.y,
+      state = v.state,
+      woodProduced = v.woodProduced,
+    })
+  end
+  
+  for i,v in pairs(ironMines) do
+    table.insert(data.ironMines, {
+      x = v.x,
+      y = v.y,
+      state = v.state,
+      direction = v.direction,
+      ironProduced = v.ironProduced,
+    })
+  end
+  
+  for i,v in pairs(woodCompactors) do
+    table.insert(data.woodCompactors, {
+      x = v.x,
+      y = v.y,
+      state = v.state,
+      woodStorage = v.woodStorage,
+    })
+  end 
+  
+  for i,v in pairs(itemContainers) do
+    table.insert(data.itemContainers, {
+      x = v.x,
+      y = v.y,
+      storage = v.storage,
+      groupid = v.groupid,
+    })
+  end
+  
+  for i,v in pairs(containerGroups) do
+    table.insert(data.groupInventories, v.items)
+  end
   
   local encoded = json.encode(data)
   

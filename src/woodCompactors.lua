@@ -6,7 +6,6 @@ end
 
 function woodCompactor.updateAdjacentBelts()
   for i,v in pairs(woodCompactors) do
-    v.adjacentBelts = {}
     v.inputBelts = {}
     v.outputBelts = {}
     
@@ -40,7 +39,7 @@ function woodCompactor.updateAdjacentBelts()
             if not output.item then
               v.woodStorage = 0
               
-              output.item = woodPlankImage
+              output.item = "woodPlankImage"
             end
           end
         end

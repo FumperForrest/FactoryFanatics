@@ -1,17 +1,18 @@
 local itemContainer = {}
 
 function itemContainer.updateAdjacentTiles()
-  containerGroups = {}
-  
   for i,v in pairs(itemContainers) do
+    v.currentFrame = 1
+    
     v.inputBelts = {}
     v.outputBelts = {}
     
     for k,l in pairs(itemContainers) do
       if (l.x == v.x + tileSize and l.y == v.y) or (l.x == v.x - tileSize and l.y == v.y) or (l.x == v.x and l.y == v.y  + tileSize) or (l.x == v.x and l.y == v.y  - tileSize) then
         if l.group ~= v.group then
-          table.insert(v.group, l)
+          table.insert(v.group.members, l)
           l.group = v.group
+          l.groupid = v.groupid
         end
       end
     end
@@ -52,20 +53,31 @@ function itemContainer.updateAdjacentTiles()
       end
     end
     
+    v.group.storage = 0
+    for _, member in pairs(v.group.members) do
+      v.group.storage = v.group.storage + (member.storage or 0)
+    end
+    
     for _,input in pairs(v.inputBelts) do
       if input.item and #v.group.items < v.group.storage then
         table.insert(v.group.items, input.item)
         input.item = nil
+        
+        v.currentFrame = 2
       end
     end
     
     for _,output in pairs(v.outputBelts) do
       if not output.item and #v.group.items > 0 then
         output.item = table.remove(v.group.items, 1)
+        
+        v.currentFrame = 3
       end
     end
     
-    table.insert(containerGroups, v.group)
+    if not v.groupid then
+      v.groupid = #containerGroups
+    end
   end
 end
 

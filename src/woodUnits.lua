@@ -26,7 +26,7 @@ function wu.updateAdjacentBelts()
   for i,v in pairs(woodUnits) do
     for k, l in pairs(v.adjacentBelts) do
       if v.state and not l.item then
-        l.item = woodImage
+        l.item = "woodImage"
         v.woodProduced = v.woodProduced + 1
       end
     end
